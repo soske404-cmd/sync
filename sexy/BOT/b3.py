@@ -182,7 +182,74 @@ def check_b3_card(cc, mm, yy, cvv, proxy=None):
         response = r.post(url, data=json.dumps(payload), headers=headers, cookies=r.cookies, timeout=30)
         result = response.text
         
-        # Parse response based on user's specified responses
+        # First try to parse as JSON (new format)
+        try:
+            resp_json = json.loads(result)
+            status = resp_json.get("status", "")
+            payload_data = resp_json.get("payload", {})
+            reason = payload_data.get("reason", "")
+            rejection_reason = payload_data.get("rejectionReason", "")
+            message = payload_data.get("message", "")
+            
+            # Check status
+            if status == "success":
+                return "Charged 💎", "Payment Success"
+            
+            # Handle rejection reasons
+            if reason == "GATEWAY_REJECTED":
+                if rejection_reason == "fraud":
+                    return "Declined ❌", "Fraud Rejected"
+                elif rejection_reason == "cvv":
+                    return "Approved ✅", "CVV Declined"
+                elif rejection_reason == "avs":
+                    return "Declined ❌", "AVS Rejected"
+                elif rejection_reason == "duplicate":
+                    return "Declined ❌", "Duplicate Transaction"
+                else:
+                    return "Declined ❌", f"Gateway Rejected: {rejection_reason}"
+            
+            # Handle specific message patterns
+            if message:
+                msg_text = str(message)
+                if "Card Issuer Declined CVV" in msg_text or "CVV" in msg_text.upper():
+                    return "Approved ✅", "CVV Declined"
+                elif "Insufficient Funds" in msg_text:
+                    return "Approved ✅", "Insufficient Funds"
+                elif "Call Issuer" in msg_text and "Pick Up Card" in msg_text:
+                    return "Declined ❌", "Pick Up Card"
+                elif "Call Issuer" in msg_text:
+                    return "Declined ❌", "Call Issuer"
+                elif "Transaction Not Allowed" in msg_text:
+                    return "Declined ❌", "Transaction Not Allowed"
+                elif "Card Not Activated" in msg_text:
+                    return "Declined ❌", "Card Not Activated"
+                elif "Closed Card" in msg_text:
+                    return "Declined ❌", "Closed Card"
+                elif "Do Not Honor" in msg_text:
+                    return "Declined ❌", "Do Not Honor"
+                elif "No Account" in msg_text:
+                    return "Declined ❌", "No Account"
+                elif "Expired Card" in msg_text:
+                    return "Declined ❌", "Expired Card"
+                elif "No Such Issuer" in msg_text:
+                    return "Declined ❌", "No Such Issuer"
+                elif "Processor Declined" in msg_text:
+                    return "Declined ❌", "Processor Declined"
+                elif "restriction" in msg_text.lower():
+                    return "Declined ❌", "Card Restricted"
+                elif "invalid" in msg_text.lower():
+                    return "Declined ❌", "Invalid Card"
+                else:
+                    return "Declined ❌", msg_text[:40]
+            
+            # If status is failure but no specific message
+            if status == "failure":
+                return "Declined ❌", reason[:40] if reason else "Declined"
+                
+        except json.JSONDecodeError:
+            pass
+        
+        # Fallback: Parse as text response (old format)
         if "Card Issuer Declined CVV" in result:
             return "Approved ✅", "CVV Declined"
         elif "Reason: CVV" in result:
@@ -219,20 +286,15 @@ def check_b3_card(cc, mm, yy, cvv, proxy=None):
             return "Declined ❌", "Card Restricted"
         elif "Credit card number is invalid" in result:
             return "Declined ❌", "Invalid Card Number"
+        elif "GATEWAY_REJECTED" in result:
+            if "fraud" in result.lower():
+                return "Declined ❌", "Fraud Rejected"
+            return "Declined ❌", "Gateway Rejected"
         elif "success" in result.lower():
             return "Charged 💎", "Payment Success"
         elif "subscription" in result.lower() and "error" not in result.lower():
             return "Charged 💎", "Success"
         else:
-            # Try to extract message from JSON
-            try:
-                resp_json = json.loads(result)
-                msg = resp_json.get("message", resp_json.get("error", ""))
-                if msg:
-                    return "Declined ❌", str(msg)[:40]
-            except:
-                pass
-            # Return raw result snippet if nothing matches
             return "Declined ❌", result[:40] if result else "No Response"
             
     except requests.exceptions.Timeout:
