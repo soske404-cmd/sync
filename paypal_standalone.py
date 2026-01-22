@@ -473,6 +473,40 @@ def extract_card(text):
     return None
 
 
+def parse_proxy(proxy_str):
+    """Convert various proxy formats to http://user:pass@host:port"""
+    if not proxy_str:
+        return None
+    
+    proxy_str = proxy_str.strip()
+    
+    # Already in correct format
+    if proxy_str.startswith('http://') or proxy_str.startswith('https://'):
+        return proxy_str
+    
+    # Format: host:port:user:pass
+    if proxy_str.count(':') == 3:
+        parts = proxy_str.split(':')
+        host, port, user, pwd = parts[0], parts[1], parts[2], parts[3]
+        return f"http://{user}:{pwd}@{host}:{port}"
+    
+    # Format: user:pass@host:port (missing http://)
+    if '@' in proxy_str:
+        return f"http://{proxy_str}"
+    
+    # Format: host:port (no auth)
+    if proxy_str.count(':') == 1:
+        return f"http://{proxy_str}"
+    
+    # Format: user:pass:host:port
+    if proxy_str.count(':') == 3:
+        parts = proxy_str.split(':')
+        user, pwd, host, port = parts[0], parts[1], parts[2], parts[3]
+        return f"http://{user}:{pwd}@{host}:{port}"
+    
+    return proxy_str
+
+
 def main():
     print("=" * 50)
     print("  PayPal $0.01 Checker - CSRF Fixed Version")
@@ -482,12 +516,21 @@ def main():
     
     # Get proxy input (optional)
     print("[?] Proxy helps avoid PayPal blocks")
-    print("    Format: http://user:pass@ip:port or http://ip:port")
+    print("    Formats accepted:")
+    print("    - host:port:user:pass")
+    print("    - http://user:pass@host:port")
+    print("    - user:pass@host:port")
+    print("    - host:port")
     proxy_input = input("Enter Proxy (or press Enter to skip): ").strip()
-    proxy = proxy_input if proxy_input else None
+    proxy = parse_proxy(proxy_input)
     
     if proxy:
-        print(f"[*] Using proxy: {proxy[:30]}...")
+        # Hide credentials in display
+        display_proxy = proxy
+        if '@' in proxy:
+            parts = proxy.split('@')
+            display_proxy = f"http://***:***@{parts[1]}"
+        print(f"[*] Using proxy: {display_proxy}")
     else:
         print("[!] No proxy - may get blocked by PayPal")
     print()
