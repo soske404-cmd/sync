@@ -451,7 +451,7 @@ async def stripe_auth_mass(client, message):
         # Card limits based on plan - Ultimate: 100, VIP: 50
         if plan.upper() == "ULTIMATE":
             mlimit = 100
-        elif plan == "VIP":
+        elif plan.upper() == "VIP":
             mlimit = 50
         else:
             mlimit = plan_info.get("mlimit", 10)

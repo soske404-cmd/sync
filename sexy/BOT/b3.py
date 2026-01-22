@@ -641,9 +641,9 @@ async def b3_mass(client, message):
         plan_name = plan_info.get("plan", "Free")
         
         # Card limits based on plan - Ultimate: 100, VIP: 50, default: mlimit
-        if plan_name == "Ultimate":
+        if plan_name.upper() == "ULTIMATE":
             mlimit = 100
-        elif plan_name == "VIP":
+        elif plan_name.upper() == "VIP":
             mlimit = 50
         else:
             mlimit = plan_info.get("mlimit", 10)
