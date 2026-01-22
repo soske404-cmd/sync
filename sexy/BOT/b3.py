@@ -236,11 +236,69 @@ class B3Gate:
             response = self.s.post(url, json=payload, headers=headers, cookies=self.s.cookies, timeout=30)
             response_text = response.text
             
-            # Parse response
-            if 'success' in response_text.lower() or 'charged' in response_text.lower():
+            # Parse Braintree/Pixorize specific responses
+            # CVV Declined = Live (card is valid)
+            if "Card Issuer Declined CVV" in response_text:
+                return "Approved ✅", "CVV Declined"
+            
+            elif "Reason: CVV" in response_text:
+                return "Approved ✅", "CVV Error"
+            
+            # Insufficient Funds = Live
+            elif "Insufficient Funds" in response_text:
+                return "Approved ✅", "Insufficient Funds"
+            
+            # Success/Charged
+            elif 'success' in response_text.lower() or 'charged' in response_text.lower():
                 return "Charged 💎", "Payment Success"
             
-            # Check for specific errors
+            # Declined responses
+            elif "Call Issuer" in response_text and "Pick Up Card" in response_text:
+                return "Declined ❌", "Call Issuer - Pick Up Card"
+            
+            elif "Call Issuer" in response_text:
+                return "Declined ❌", "Call Issuer"
+            
+            elif "Transaction Not Allowed" in response_text:
+                return "Declined ❌", "Transaction Not Allowed"
+            
+            elif "Card Not Activated" in response_text:
+                return "Declined ❌", "Card Not Activated"
+            
+            elif "Closed Card" in response_text:
+                return "Declined ❌", "Closed Card"
+            
+            elif "Do Not Honor" in response_text:
+                return "Declined ❌", "Do Not Honor"
+            
+            elif "No Account" in response_text:
+                return "Declined ❌", "No Account"
+            
+            elif "Expired Card" in response_text:
+                return "Declined ❌", "Expired Card"
+            
+            elif "Cannot Authorize" in response_text and "Policy" in response_text:
+                return "Declined ❌", "Cannot Authorize (Policy)"
+            
+            elif "Cannot Authorize" in response_text and "Life cycle" in response_text:
+                return "Declined ❌", "Cannot Authorize (Lifecycle)"
+            
+            elif "No Such Issuer" in response_text:
+                return "Declined ❌", "No Such Issuer"
+            
+            elif "Fraud Suspected" in response_text:
+                return "Declined ❌", "Fraud Suspected"
+            
+            elif "Processor Declined" in response_text:
+                return "Declined ❌", "Processor Declined"
+            
+            elif "restriction on the card" in response_text:
+                return "Declined ❌", "Card Restricted"
+            
+            elif "Credit card number is invalid" in response_text:
+                return "Declined ❌", "Invalid Card Number"
+            
+            # Generic error parsing
             try:
                 resp_json = response.json()
                 message = resp_json.get("message", "")
@@ -255,18 +313,6 @@ class B3Gate:
                 # Insufficient funds = Approved
                 elif "INSUFFICIENT" in msg_upper:
                     return "Approved ✅", "Insufficient Funds"
-                
-                # Do not honor = Approved
-                elif "DO NOT HONOR" in msg_upper or "DO_NOT_HONOR" in msg_upper:
-                    return "Approved ✅", "Do Not Honor"
-                
-                # Risk/Fraud = Approved (card is live)
-                elif "RISK" in msg_upper or "FRAUD" in msg_upper:
-                    return "Approved ✅", "Risk Declined"
-                
-                # Lost/Stolen = Approved
-                elif "LOST" in msg_upper or "STOLEN" in msg_upper:
-                    return "Approved ✅", "Lost/Stolen Card"
                 
                 # Declined
                 elif "DECLINED" in msg_upper or "DENIED" in msg_upper:

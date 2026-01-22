@@ -249,6 +249,9 @@ class PaypalGate:
                     # Lost/Stolen = Approved
                     elif "LOST" in code.upper() or "STOLEN" in code.upper():
                         return "Approved ✅", code
+                    # Login Error = Approved (card is valid)
+                    elif "LOGIN_ERROR" in code.upper() or "LOGIN ERROR" in code.upper():
+                        return "Approved ✅", code
                     else:
                         return "Declined ❌", code
                 else:

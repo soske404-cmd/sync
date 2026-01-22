@@ -265,7 +265,7 @@ async def show_cmds(client, message):
     )
 
 
-@Client.on_callback_query(filters.regex("^(exit|close|home|gates|tools|auth|charge|shopify|auto|braintree|stripe|authnet_charge|paypal_charge)$"))
+@Client.on_callback_query(filters.regex("^(exit|close|home|gates|tools|auth|charge|shopify|auto|braintree|stripe|authnet_charge|paypal_charge|txt_checker_info)$"))
 async def handle_callbacks(client, callback_query):
     data = callback_query.data
 
@@ -320,6 +320,12 @@ async def handle_callbacks(client, callback_query):
     elif data == "auth":
         auth_text = """<pre>#Sos 〔AUTH GATES〕</pre>
 ━ ━ ━ ━ ━━━ ━ ━ ━ ━
+⟐ <b>Name</b>: <code>B3 Auth [Braintree]</code>
+⟐ <b>Command</b>: <code>/b3 cc|mm|yy|cvv</code>
+⟐ <b>Mass Cmd</b>: <code>/mb3 cc|mm|yy|cvv</code>
+⟐ <b>Status</b>: <code>Active ✅</code>
+⟐ <b>Note</b>: <code>Premium Only</code>
+═══════════════════
 ⟐ <b>Name</b>: <code>AutoStripe [Site Based]</code>
 ⟐ <b>Command</b>: <code>/str cc|mm|yy|cvv</code>
 ⟐ <b>Mass Cmd</b>: <code>/mstr cc|mm|yy|cvv</code>
@@ -358,6 +364,9 @@ async def handle_callbacks(client, callback_query):
             [
                 InlineKeyboardButton("Shopify", callback_data="shopify"),
                 InlineKeyboardButton("Stripe", callback_data="stripe")
+            ],
+            [
+                InlineKeyboardButton("📄 TXT Checker", callback_data="txt_checker_info")
             ],
             [
                 InlineKeyboardButton("Back", callback_data="gates"),
@@ -497,6 +506,43 @@ async def handle_callbacks(client, callback_query):
         await callback_query.message.edit_text(
             paypal_text,
             reply_markup=paypal_buttons
+        )
+
+    elif data == "txt_checker_info":
+        txt_text = """<pre>#Sos 〔TXT File Checker〕</pre>
+━ ━ ━ ━ ━━━ ━ ━ ━ ━
+⟐ <b>Command</b>: <code>/txt</code>
+⟐ <b>Status</b>: <code>Active ✅</code>
+⟐ <b>Plans</b>: <code>Ultimate & VIP Only</code>
+━ ━ ━ ━ ━━━ ━ ━ ━ ━
+<b>Card Limits:</b>
+⟐ <b>Ultimate</b>: <code>500 cards</code>
+⟐ <b>VIP</b>: <code>300 cards</code>
+━ ━ ━ ━ ━━━ ━ ━ ━ ━
+<b>Features:</b>
+⟐ Upload TXT file with cards
+⟐ Select any gate to check
+⟐ View Charged/Approved/Declined
+⟐ Stop checking anytime
+⟐ Click categories to view cards
+━ ━ ━ ━ ━━━ ━ ━ ━ ━
+<b>Supported Gates:</b>
+⟐ PayPal $0.01
+⟐ Authnet $1
+⟐ B3 Auth
+⟐ Stripe Auth
+⟐ Payflow Auth
+⟐ AutoStripe
+"""
+        txt_buttons = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("Back", callback_data="charge"),
+                InlineKeyboardButton("Close", callback_data="exit")
+            ]
+        ])
+        await callback_query.message.edit_text(
+            txt_text,
+            reply_markup=txt_buttons
         )
 
     elif data == "tools":
