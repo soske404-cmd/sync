@@ -14,6 +14,7 @@ from BOT.authnet import check_authnet
 from BOT.payflow import check_payflow
 from BOT.stripe_auth import check_stripe_auth
 from BOT.b3 import check_b3
+from BOT.stripe_charge import check_stripe_charge
 
 # Store active checking sessions
 active_sessions = {}
@@ -79,9 +80,14 @@ def is_txt_allowed(user_id):
         user = users.get(str(user_id))
         if not user:
             return False, 0
-        plan = user.get("plan", {}).get("plan", "Free")
-        if plan == "Ultimate":
+        plan = user.get("plan", {}).get("plan", "Free").upper()
+        # Owner has unlimited access
+        if plan == "OWNER":
+            return True, 1000
+        # ULTIMATE plan - 500 cards
+        elif plan == "ULTIMATE":
             return True, 500
+        # VIP plan - 300 cards
         elif plan == "VIP":
             return True, 300
         else:
@@ -100,6 +106,8 @@ async def check_card_with_gate(gate, cc, mm, yy, cvv, proxy):
         return await loop.run_in_executor(None, check_paypal, cc, mm, yy, cvv, proxy)
     elif gate == "an":
         return await loop.run_in_executor(None, check_authnet, cc, mm, yy, cvv, proxy)
+    elif gate == "sc":
+        return await loop.run_in_executor(None, check_stripe_charge, cc, mm, yy, cvv, proxy)
     elif gate == "pl":
         return await loop.run_in_executor(None, check_payflow, cc, mm, yy, cvv, proxy)
     elif gate == "au":
@@ -171,11 +179,14 @@ async def txt_checker_start(client, message):
             InlineKeyboardButton("Authnet $1", callback_data=f"txtgate_an_{user_id}")
         ],
         [
-            InlineKeyboardButton("B3 Auth", callback_data=f"txtgate_b3_{user_id}"),
-            InlineKeyboardButton("Stripe Auth", callback_data=f"txtgate_au_{user_id}")
+            InlineKeyboardButton("Stripe $1", callback_data=f"txtgate_sc_{user_id}"),
+            InlineKeyboardButton("B3 Auth", callback_data=f"txtgate_b3_{user_id}")
         ],
         [
-            InlineKeyboardButton("Payflow Auth", callback_data=f"txtgate_pl_{user_id}"),
+            InlineKeyboardButton("Stripe Auth", callback_data=f"txtgate_au_{user_id}"),
+            InlineKeyboardButton("Payflow Auth", callback_data=f"txtgate_pl_{user_id}")
+        ],
+        [
             InlineKeyboardButton("AutoStripe", callback_data=f"txtgate_str_{user_id}")
         ],
         [
@@ -217,6 +228,7 @@ async def txt_gate_selected(client, callback: CallbackQuery):
     gate_names = {
         "pp": "PayPal $0.01",
         "an": "Authnet $1",
+        "sc": "Stripe $1 Charge",
         "b3": "B3 Auth",
         "au": "Stripe Auth",
         "pl": "Payflow Auth",
@@ -458,6 +470,7 @@ async def handle_txt_file(client, message):
     gate_names = {
         "pp": "PayPal $0.01",
         "an": "Authnet $1",
+        "sc": "Stripe $1 Charge",
         "b3": "B3 Auth",
         "au": "Stripe Auth",
         "pl": "Payflow Auth",

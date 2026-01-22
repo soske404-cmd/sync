@@ -433,13 +433,13 @@ async def handle_callbacks(client, callback_query):
     elif data == "stripe":
         stripe_text = """<pre>#Stripe 〔Charge〕</pre>
 ━ ━ ━ ━ ━━━ ━ ━ ━ ━
-⟐ <b>Name</b>: <code>Stripe 1$</code>
-⟐ <b>Command</b>: <code>$mag cc|mes|ano|cvv</code>
-⟐ <b>Status: Dead ❌</b>
+⟐ <b>Name</b>: <code>Stripe $1 Charge</code>
+⟐ <b>Command</b>: <code>/sc cc|mm|yy|cvv</code>
+⟐ <b>Mass Cmd</b>: <code>/msc cc|mm|yy|cvv</code>
+⟐ <b>Status</b>: <code>Active ✅</code>
+⟐ <b>Note</b>: <code>Premium Only</code>
 ━ ━ ━ ━ ━━━ ━ ━ ━ ━
-⟐ <b>Mass Cmd</b>: <code>$mmag cc|mes|ano|cvv</code>
 ⟐ <b>Limit</b>: <code>As Per User's Plan</code>
-⟐ <b>Status: Dead ❌</b>
 """
         stripe_buttons = InlineKeyboardMarkup([
             [
@@ -473,6 +473,7 @@ async def handle_callbacks(client, callback_query):
 ⟐ <b>Command</b>: <code>/an cc|mm|yy|cvv</code>
 ⟐ <b>Mass Cmd</b>: <code>/man cc|mm|yy|cvv</code>
 ⟐ <b>Status</b>: <code>Active ✅</code>
+⟐ <b>Note</b>: <code>Premium Only</code>
 ━ ━ ━ ━ ━━━ ━ ━ ━ ━
 ⟐ <b>Limit</b>: <code>As Per User's Plan</code>
 """

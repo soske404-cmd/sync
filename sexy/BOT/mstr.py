@@ -195,7 +195,7 @@ async def mstr_handler(client, message):
         badge = plan_info.get("badge", "🎟️")
         
         # Card limits based on plan - Ultimate: 100, VIP: 50
-        if plan == "Ultimate":
+        if plan.upper() == "ULTIMATE":
             mlimit = 100
         elif plan == "VIP":
             mlimit = 50
